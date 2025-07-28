@@ -1,0 +1,17 @@
+fastapi>=0.116.1
+uvicorn>=0.27.0
+httpx>=0.27.0
+pydantic>=2.6.0
+# Use detoxify 0.5.2 which depends on tokenizers 0.21.4 that has pre-built wheels for macOS
+detoxify==0.5.2
+python-multipart>=0.0.9
+python-dotenv>=1.0.0
+loguru>=0.7.2
+gunicorn>=21.2.0
+
+# Database and memory dependencies
+sqlalchemy>=2.0.0
+pymilvus>=2.3.0
+sentence-transformers>=2.2.2
+torch>=2.0.0
+numpy>=2.0.0

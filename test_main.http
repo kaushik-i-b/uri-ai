@@ -1,0 +1,97 @@
+# Test your FastAPI endpoints
+
+### Test root endpoint
+GET http://127.0.0.1:8000/
+Accept: application/json
+
+###
+
+### Test chat endpoint with normal user input (now includes follow-up suggestions)
+POST http://127.0.0.1:8000/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "user_input": "I've been feeling a bit stressed lately with work. Do you have any relaxation techniques?",
+  "user_id": "test_user_123"
+}
+
+### Response should include:
+# - reply: AI's response with relaxation techniques
+# - crisis: false
+# - follow_up_suggestions: List of suggested follow-up messages
+
+###
+
+### Test chat endpoint with potential crisis indicators
+POST http://127.0.0.1:8000/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "user_input": "I don't want to live anymore. Everything feels hopeless.",
+  "user_id": "test_user_456"
+}
+
+###
+
+### Test chat endpoint with empty input
+POST http://127.0.0.1:8000/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "user_input": "",
+  "user_id": "test_user_789"
+}
+
+###
+
+### Test chat endpoint with very long input
+POST http://127.0.0.1:8000/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "user_input": "I've been experiencing a lot of anxiety lately. It started about three months ago when I began a new job. The pressure is intense, and I find myself worrying constantly about deadlines and making mistakes. Sometimes I wake up in the middle of the night with my heart racing. During the day, I have trouble concentrating on tasks because my mind keeps jumping to all the things that could go wrong. I've tried deep breathing and meditation, but they only help temporarily. I'm eating less than usual and have lost some weight. My friends have noticed that I'm more withdrawn and don't join social activities as much as before. I'm wondering if this is just normal stress or if it might be an anxiety disorder. What do you think? What strategies might help me manage these feelings better?",
+  "user_id": "test_user_101"
+}
+
+###
+
+### Test suggest endpoint with empty input
+POST http://127.0.0.1:8000/suggest
+Content-Type: application/json
+Accept: application/json
+
+{
+  "partial_input": "",
+  "user_id": "test_user_789"
+}
+
+###
+
+### Test suggest endpoint with partial input
+POST http://127.0.0.1:8000/suggest
+Content-Type: application/json
+Accept: application/json
+
+{
+  "partial_input": "How to deal with anx",
+  "user_id": "test_user_123"
+}
+
+###
+
+### Test suggest endpoint with custom max_suggestions
+POST http://127.0.0.1:8000/suggest
+Content-Type: application/json
+Accept: application/json
+
+{
+  "partial_input": "I feel",
+  "user_id": "test_user_456",
+  "max_suggestions": 5
+}
+
+###
