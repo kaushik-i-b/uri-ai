@@ -16,6 +16,7 @@ from pydantic import BaseModel
 import logging
 import asyncio
 import time
+import httpx
 from typing import Dict, Any, Optional, List, Tuple
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -49,27 +50,15 @@ app.add_middleware(
 ollama_client = OllamaClient()
 crisis_detector = CrisisDetector()
 
-# Initialize memory manager with Milvus configuration
-# Get Milvus configuration from environment variables or use defaults
+# Load environment variables
 import os
 from dotenv import load_dotenv
-
-# Load environment variables
 load_dotenv()
 
-# Get Milvus configuration
-milvus_host = os.getenv("MILVUS_HOST", "localhost")
-milvus_port = os.getenv("MILVUS_PORT", "19530")
-milvus_collection = os.getenv("MILVUS_COLLECTION", "chat_memories")
+# Initialize memory manager with SQLite
+memory_manager = MemoryManager()
 
-# Initialize memory manager
-memory_manager = MemoryManager(
-    host=milvus_host,
-    port=milvus_port,
-    collection_name=milvus_collection
-)
-
-logger.info(f"Initialized Milvus memory manager with host={milvus_host}, port={milvus_port}, collection={milvus_collection}")
+logger.info("Initialized SQLite-based memory manager")
 
 # Define request and response models
 class ChatRequest(BaseModel):
@@ -106,12 +95,77 @@ async def root():
         "status": "online",
         "endpoints": {
             "chat": "/chat - POST request with user_input and user_id. Response includes AI reply, crisis flag, and follow-up suggestions for continuing the conversation.",
-            "suggest": "/suggest - POST request with partial_input and user_id for autocomplete suggestions"
+            "suggest": "/suggest - POST request with partial_input and user_id for autocomplete suggestions",
+            "health": "/health - GET request to check the health status of the application"
         },
         "features": {
             "auto_suggestions": "The chat endpoint now provides follow-up suggestions to help users continue the conversation after receiving an AI response."
         }
     }
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify the application is running properly.
+    Returns a response with status information about the application and its external services.
+    """
+    # Initialize the response with basic information
+    response = {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "Oppuna Mental Health Assistant API",
+        "external_services": {}
+    }
+    
+    # Check Ollama API status
+    try:
+        ollama_status = "healthy"
+        ollama_details = {
+            "url": ollama_client.base_url,
+            "model": ollama_client.model,
+            "fallback_mode": ollama_client.fallback_mode
+        }
+        
+        # Only attempt to connect if not in fallback mode
+        if not ollama_client.fallback_mode:
+            async with httpx.AsyncClient() as client:
+                # Use a short timeout for health check
+                health_response = await client.get(
+                    f"{ollama_client.base_url}/api/tags",
+                    timeout=5.0
+                )
+                
+                if health_response.status_code != 200:
+                    ollama_status = "degraded"
+                    ollama_details["error"] = f"API returned status code {health_response.status_code}"
+                else:
+                    # Add available models information
+                    models = health_response.json().get("models", [])
+                    ollama_details["available_models"] = models
+        else:
+            ollama_status = "fallback"
+            
+    except httpx.ConnectError as e:
+        ollama_status = "unavailable"
+        ollama_details["error"] = f"Connection error: {str(e)}"
+    except httpx.TimeoutError:
+        ollama_status = "timeout"
+        ollama_details["error"] = "Connection timed out"
+    except Exception as e:
+        ollama_status = "error"
+        ollama_details["error"] = f"Unexpected error: {str(e)}"
+    
+    # Add Ollama status to the response
+    response["external_services"]["ollama"] = {
+        "status": ollama_status,
+        "details": ollama_details
+    }
+    
+    # Update overall status based on external services
+    if ollama_status not in ["healthy", "fallback"]:
+        response["status"] = "degraded"
+    
+    return response
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
@@ -280,3 +334,13 @@ async def get_history(user_id: str = Path(..., description="The user ID to retri
             status_code=500,
             detail="An error occurred while retrieving chat history"
         )
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # Get port from environment variable or use default
+    port = int(os.getenv("PORT", 8080))
+    
+    # Start the server, listening on all interfaces
+    uvicorn.run(app, host="0.0.0.0", port=port)

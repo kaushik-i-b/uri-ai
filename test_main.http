@@ -48,7 +48,7 @@ Accept: application/json
 ###
 
 ### Test chat endpoint with very long input
-POST http://127.0.0.1:8000/chat
+POST https://uri-genai.fly.dev/chat
 Content-Type: application/json
 Accept: application/json
 
@@ -93,5 +93,16 @@ Accept: application/json
   "user_id": "test_user_456",
   "max_suggestions": 5
 }
+####
+GET https://uri-genai.fly.dev/health
+Content-Type: application/json
+Accept: application/json
+uri: TEST-GENAI
+
+###
+
+### Test health endpoint
+GET http://127.0.0.1:8000/health
+Accept: application/json
 
 ###

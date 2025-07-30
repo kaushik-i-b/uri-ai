@@ -1,6 +1,7 @@
 import httpx
 import logging
 import os
+import random
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
@@ -25,7 +26,14 @@ class OllamaClient:
         self.base_url = base_url or os.getenv("OLLAMA_API_URL", "http://localhost:11434")
         self.model = os.getenv("OLLAMA_MODEL", "llama2-uncensored")  # Get model from env or use default
         self.generate_endpoint = f"{self.base_url}/api/generate"
-        logger.info(f"Initialized OllamaClient with base_url: {self.base_url}, model: {self.model}")
+        
+        # Check if fallback mode is enabled
+        self.fallback_mode = os.getenv("ENABLE_FALLBACK_MODE", "false").lower() == "true"
+        
+        if self.fallback_mode:
+            logger.info(f"Initialized OllamaClient with fallback mode enabled. Will use predefined responses if Ollama is unavailable.")
+        else:
+            logger.info(f"Initialized OllamaClient with base_url: {self.base_url}, model: {self.model}")
         
     async def generate_response(self, user_input: str, user_id: str) -> str:
         """
@@ -38,6 +46,26 @@ class OllamaClient:
         Returns:
             The model's response as a string
         """
+        # Predefined fallback responses for when Ollama is unavailable
+        fallback_responses = [
+            "I understand you're reaching out about your mental health. While I'm currently operating in a limited capacity, I want you to know that your well-being matters. Consider speaking with a mental health professional who can provide personalized support.",
+            
+            "Thank you for sharing your thoughts with me. I'm currently running in fallback mode with limited capabilities, but I'm here to acknowledge your message. For more comprehensive support, please consider reaching out to a mental health professional.",
+            
+            "I appreciate you trusting me with your thoughts. While I'm operating with limited functionality at the moment, I want to encourage you to practice self-care and reach out to supportive people in your life.",
+            
+            "I'm currently operating in a simplified mode, but I want to acknowledge your message. Remember that taking care of your mental health is important, and professional resources are available to provide the support you need.",
+            
+            "While I'm running with limited capabilities right now, I want you to know that your mental health matters. Consider practicing mindfulness, reaching out to supportive friends or family, or consulting with a mental health professional.",
+            
+            "I'm currently in fallback mode with limited functionality, but I want to acknowledge your message. Remember that it's okay to ask for help, and there are resources available to support your mental health journey."
+        ]
+        
+        # If fallback mode is enabled, return a predefined response
+        if self.fallback_mode:
+            logger.info(f"Using fallback response for user {user_id} (fallback mode enabled)")
+            return random.choice(fallback_responses)
+            
         try:
             # Prepare the request payload
             payload = {
@@ -71,28 +99,25 @@ class OllamaClient:
         except httpx.ConnectError as e:
             logger.error(f"Connection error to Ollama API: {str(e)}")
             logger.error(f"Attempted to connect to: {self.generate_endpoint}")
-            logger.error("Please check if Ollama is running and accessible at the configured URL.")
-            logger.error("Run 'python test_ollama_connection.py' to diagnose connection issues.")
-            return (
-                "I apologize, but I'm currently unable to connect to my language model service. "
-                "This could be because the service is not running or is experiencing issues. "
-                "Please check the following:\n"
-                "1. Ensure Ollama is installed and running\n"
-                "2. Verify the correct URL is configured in the .env file\n"
-                "3. Check network connectivity between this service and Ollama\n"
-                "For more help, please refer to the README.md file or contact support."
-            )
+            
+            # Use fallback responses for connection errors
+            logger.info(f"Using fallback response for user {user_id} (connection error)")
+            return random.choice(fallback_responses)
+            
         except httpx.TimeoutError:
             logger.error(f"Timeout connecting to Ollama API at {self.generate_endpoint}")
-            return (
-                "I apologize, but the request to the language model timed out. "
-                "This might be due to high load or the complexity of your query. "
-                "Please try again with a shorter message or try again later."
-            )
+            
+            # Use fallback responses for timeout errors
+            logger.info(f"Using fallback response for user {user_id} (timeout error)")
+            return random.choice(fallback_responses)
+            
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
             logger.error(f"Request was sent to: {self.generate_endpoint}")
-            return "I apologize, but I encountered an error processing your request. Please try again later."
+            
+            # Use fallback responses for general errors
+            logger.info(f"Using fallback response for user {user_id} (general error)")
+            return random.choice(fallback_responses)
             
     async def generate_follow_up_suggestions(self, user_input: str, ai_response: str, user_id: str, max_suggestions: int = 3) -> List[str]:
         """
@@ -107,6 +132,21 @@ class OllamaClient:
         Returns:
             A list of suggested follow-up messages for the user
         """
+        # Default suggestions to use in fallback mode or in case of errors
+        default_suggestions = [
+            "Can you tell me more about that?",
+            "How can I implement these suggestions in my daily life?",
+            "What if that doesn't work for me?",
+            "Could you explain that in a different way?",
+            "How might this affect my mental health?",
+            "What are some resources I could look into?"
+        ]
+        
+        # If fallback mode is enabled, return default suggestions immediately
+        if self.fallback_mode:
+            logger.info(f"Using default follow-up suggestions for user {user_id} (fallback mode enabled)")
+            return default_suggestions[:max_suggestions]
+            
         try:
             # Prepare the request payload with a prompt specifically for generating follow-up suggestions
             payload = {
@@ -127,9 +167,7 @@ class OllamaClient:
                 
                 if response.status_code != 200:
                     logger.error(f"Ollama API error for follow-up suggestions: {response.status_code} - {response.text}")
-                    return ["Can you tell me more about that?", 
-                            "How can I implement these suggestions in my daily life?", 
-                            "What if that doesn't work for me?"]
+                    return default_suggestions[:max_suggestions]
                 
                 result = response.json()
                 suggestions_text = result.get("response", "")
@@ -142,21 +180,19 @@ class OllamaClient:
                 
                 # If we don't have enough suggestions, add some defaults
                 if len(filtered_suggestions) < max_suggestions:
-                    defaults = [
-                        "Can you tell me more about that?",
-                        "How can I implement these suggestions in my daily life?",
-                        "What if that doesn't work for me?"
-                    ]
-                    filtered_suggestions.extend(defaults[:max_suggestions - len(filtered_suggestions)])
+                    filtered_suggestions.extend(default_suggestions[:max_suggestions - len(filtered_suggestions)])
                 
                 return filtered_suggestions[:max_suggestions]
                 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error to Ollama API: {str(e)}")
+            logger.info(f"Using default follow-up suggestions for user {user_id} (connection error)")
+            return default_suggestions[:max_suggestions]
+            
         except Exception as e:
             logger.error(f"Error generating follow-up suggestions: {str(e)}")
-            # Return default suggestions in case of error
-            return ["Can you tell me more about that?", 
-                    "How can I implement these suggestions in my daily life?", 
-                    "What if that doesn't work for me?"]
+            logger.info(f"Using default follow-up suggestions for user {user_id} (general error)")
+            return default_suggestions[:max_suggestions]
     
     async def generate_suggestions(self, partial_input: str, user_id: str, max_suggestions: int = 3) -> List[str]:
         """
@@ -170,12 +206,37 @@ class OllamaClient:
         Returns:
             A list of suggested completions for the partial input
         """
-        try:
-            if not partial_input.strip():
-                return ["How are you feeling today?", 
-                        "Can you tell me about your day?", 
-                        "What's on your mind?"]
+        # Default suggestions for empty input or fallback mode
+        empty_input_suggestions = [
+            "How are you feeling today?", 
+            "Can you tell me about your day?", 
+            "What's on your mind?",
+            "I've been feeling anxious lately",
+            "Can you help me with stress management?",
+            "I'm having trouble sleeping"
+        ]
+        
+        # If input is empty, return default suggestions
+        if not partial_input.strip():
+            return empty_input_suggestions[:max_suggestions]
             
+        # If fallback mode is enabled, return input-specific default suggestions
+        if self.fallback_mode:
+            logger.info(f"Using default suggestions for user {user_id} (fallback mode enabled)")
+            
+            # Create input-specific suggestions
+            defaults = [
+                f"{partial_input} and how to cope with it",
+                f"{partial_input} symptoms and treatment",
+                f"How to manage {partial_input}",
+                f"{partial_input} techniques for mental health",
+                f"Ways to improve {partial_input}",
+                f"{partial_input} and its impact on wellbeing"
+            ]
+            
+            return defaults[:max_suggestions]
+            
+        try:
             # Prepare the request payload with a prompt specifically for generating suggestions
             payload = {
                 "model": self.model,
@@ -195,9 +256,14 @@ class OllamaClient:
                 
                 if response.status_code != 200:
                     logger.error(f"Ollama API error for suggestions: {response.status_code} - {response.text}")
-                    return ["How are you feeling today?", 
-                            "Can you tell me about your day?", 
-                            "What's on your mind?"]
+                    
+                    # Create input-specific suggestions for error case
+                    defaults = [
+                        f"{partial_input} and how to cope with it",
+                        f"{partial_input} symptoms and treatment",
+                        f"How to manage {partial_input}"
+                    ]
+                    return defaults[:max_suggestions]
                 
                 result = response.json()
                 suggestions_text = result.get("response", "")
@@ -223,9 +289,27 @@ class OllamaClient:
                 
                 return filtered_suggestions[:max_suggestions]
                 
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error to Ollama API: {str(e)}")
+            logger.info(f"Using default suggestions for user {user_id} (connection error)")
+            
+            # Create input-specific suggestions for connection error
+            defaults = [
+                f"{partial_input} and how to cope with it",
+                f"{partial_input} symptoms and treatment",
+                f"How to manage {partial_input}",
+                f"{partial_input} techniques for mental health"
+            ]
+            return defaults[:max_suggestions]
+            
         except Exception as e:
             logger.error(f"Error generating suggestions: {str(e)}")
-            # Return default suggestions in case of error
-            return ["How are you feeling today?", 
-                    "Can you tell me about your day?", 
-                    "What's on your mind?"]
+            logger.info(f"Using default suggestions for user {user_id} (general error)")
+            
+            # Create input-specific suggestions for general error
+            defaults = [
+                f"{partial_input} and how to cope with it",
+                f"{partial_input} symptoms and treatment",
+                f"How to manage {partial_input}"
+            ]
+            return defaults[:max_suggestions]

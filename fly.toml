@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for uri-genai on 2025-07-29T02:45:42+04:00
+# fly.toml app configuration file generated for uri-genai-new on 2025-07-31T01:02:46+04:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'uri-genai'
+app = 'uri-genai-new'
 primary_region = 'sin'
 
 [build]
